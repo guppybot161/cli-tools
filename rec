@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+"""rec — minimal audio recorder using PulseAudio (WSL2/WSLg)"""
+
+import argparse
+import subprocess
+import sys
+import threading
+import time
+from datetime import datetime
+from pathlib import Path
+
+DEVICE = "RDPSource"
+OUTPUT_DIR = Path.home() / "recordings"
+
+
+def parse_args():
+    p = argparse.ArgumentParser(
+        description="Record audio via PulseAudio",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="Examples:\n  rec                      # record until Ctrl+C\n  rec -d 10                # record 10 seconds\n  rec -o meeting.wav       # specify output file\n  rec -d 5 -o test.wav     # 5 seconds to test.wav",
+    )
+    p.add_argument("-d", "--duration", type=float, help="Duration in seconds (default: until Ctrl+C)")
+    p.add_argument("-o", "--output", type=str, help="Output file (default: ~/recordings/YYYYMMDD_HHMMSS.wav)")
+    p.add_argument("--device", default=DEVICE, help=f"PulseAudio source device (default: {DEVICE})")
+    p.add_argument("--list-devices", action="store_true", help="List available input devices and exit")
+    return p.parse_args()
+
+
+def list_devices():
+    result = subprocess.run(["pactl", "list", "sources", "short"], capture_output=True, text=True)
+    if result.returncode != 0:
+        print("Error: pactl not available or PulseAudio not running", file=sys.stderr)
+        sys.exit(1)
+    print("Available sources:")
+    for line in result.stdout.strip().splitlines():
+        parts = line.split("\t")
+        if len(parts) >= 3:
+            idx, name, state = parts[0], parts[1], parts[-1]
+            marker = " <-- default" if name == DEVICE else ""
+            print(f"  [{idx}] {name}  ({state}){marker}")
+
+
+def spinner(stop_event, start_time):
+    frames = ["●○○", "○●○", "○○●", "○●○"]
+    i = 0
+    while not stop_event.is_set():
+        elapsed = time.time() - start_time
+        mins, secs = divmod(int(elapsed), 60)
+        print(f"\r  {frames[i % len(frames)]}  {mins:02d}:{secs:02d}  recording...  (Ctrl+C to stop)", end="", flush=True)
+        i += 1
+        time.sleep(0.3)
+    print()
+
+
+def record(device, output_path, duration=None):
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    cmd = ["parecord", f"--device={device}", "--channels=1", "--format=s16le", "--rate=16000", str(output_path)]
+
+    print(f"  Output : {output_path}")
+    print(f"  Device : {device}")
+    if duration:
+        print(f"  Duration: {duration}s")
+    else:
+        print("  Press Ctrl+C to stop")
+    print()
+
+    start = time.time()
+    stop_event = threading.Event()
+    spin = threading.Thread(target=spinner, args=(stop_event, start), daemon=True)
+    spin.start()
+
+    proc = subprocess.Popen(cmd, stderr=subprocess.PIPE)
+    try:
+        proc.wait(timeout=duration)  # raises TimeoutExpired after N seconds; None = wait forever
+    except subprocess.TimeoutExpired:
+        pass  # expected when duration is set
+    except KeyboardInterrupt:
+        pass
+    finally:
+        proc.terminate()
+        _, stderr_data = proc.communicate(timeout=2)
+        stop_event.set()
+        spin.join()
+        if proc.returncode not in (0, -15) and stderr_data:
+            print(f"  parecord: {stderr_data.decode().strip()}", file=sys.stderr)
+
+    elapsed = time.time() - start
+    size = output_path.stat().st_size if output_path.exists() else 0
+
+    if size == 0:
+        print(f"  Warning: output file is empty — check that '{device}' is active")
+        sys.exit(1)
+
+    print(f"  Saved  : {output_path}  ({size // 1024} KB, {elapsed:.1f}s)")
+
+
+def main():
+    args = parse_args()
+
+    if args.list_devices:
+        list_devices()
+        return
+
+    if args.output:
+        output_path = Path(args.output).expanduser()
+        if not output_path.suffix:
+            output_path = output_path.with_suffix(".wav")
+    else:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_path = OUTPUT_DIR / f"{timestamp}.wav"
+
+    record(args.device, output_path, duration=args.duration)
+
+
+if __name__ == "__main__":
+    main()

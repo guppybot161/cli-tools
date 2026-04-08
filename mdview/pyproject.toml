@@ -1,0 +1,14 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mdview"
+version = "1.0.0"
+dependencies = [
+    "markdown-it-py>=4.0",
+    "weasyprint",
+]
+
+[project.scripts]
+mdview = "mdview:main"

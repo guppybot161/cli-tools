@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# lt — list files modified within the last n days
+# Usage: lt <directory> [-t <days>]
+dir="${1:-.}"
+days=1
+
+shift
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -t) days="$2"; shift 2 ;;
+        *) echo "Unknown option: $1" >&2; exit 1 ;;
+    esac
+done
+
+find "$dir" -mtime -"$days" -type f
