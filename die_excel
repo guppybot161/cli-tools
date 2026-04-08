@@ -1,0 +1,170 @@
+#!/usr/bin/env python3
+"""die_excel — convert .xlsx files to .csv and/or .jsonl (records)."""
+
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+from pathlib import Path
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Convert .xlsx files to .csv and/or .jsonl (records orientation).",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""\
+examples:
+  die_excel report.xlsx
+  die_excel report.xlsx -f jsonl
+  die_excel report.xlsx -f both -o /tmp/out/
+  die_excel ./data/ -f csv
+  die_excel report.xlsx --list-sheets
+  die_excel report.xlsx -s "Tabelle1" -f jsonl
+""",
+    )
+    parser.add_argument(
+        "input",
+        nargs="+",
+        type=Path,
+        help=".xlsx file(s) or a single directory (auto-globs *.xlsx)",
+    )
+    parser.add_argument(
+        "-f",
+        "--format",
+        choices=("csv", "jsonl", "both"),
+        default="csv",
+        help="output format (default: csv)",
+    )
+    parser.add_argument(
+        "-o",
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="output directory (default: same as input file)",
+    )
+    parser.add_argument(
+        "-s",
+        "--sheet",
+        default=None,
+        help="convert only this sheet (default: all sheets)",
+    )
+    parser.add_argument(
+        "--list-sheets",
+        action="store_true",
+        help="list sheet names and exit",
+    )
+    return parser.parse_args()
+
+
+def resolve_inputs(paths: list[Path]) -> list[Path]:
+    if len(paths) == 1 and paths[0].is_dir():
+        files = sorted(paths[0].glob("*.xlsx"))
+        if not files:
+            sys.exit(f"error: no .xlsx files in {paths[0]}")
+        return files
+    for p in paths:
+        if not p.exists():
+            sys.exit(f"error: {p} does not exist")
+        if p.suffix.lower() != ".xlsx":
+            sys.exit(f"error: {p} is not an .xlsx file")
+    return sorted(paths)
+
+
+_UNSAFE = re.compile(r'[/:*?"<>|\\]')
+
+
+def sanitize_sheet(name: str) -> str:
+    return _UNSAFE.sub("", name).replace(" ", "_").strip() or "sheet"
+
+
+def output_path(
+    src: Path, sheet: str | None, out_dir: Path | None, ext: str
+) -> Path:
+    base = out_dir or src.parent
+    suffix = f"__{sanitize_sheet(sheet)}" if sheet else ""
+    return base / f"{src.stem}{suffix}.{ext}"
+
+
+def convert(df, path: Path, fmt: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if fmt == "csv":
+        df.to_csv(path, index=False, encoding="utf-8")
+    else:
+        df.to_json(path, orient="records", lines=True, force_ascii=False)
+    print(f"  {fmt:5s} -> {path}")
+
+
+def process_file(
+    src: Path, fmt: str, out_dir: Path | None, sheet_filter: str | None
+) -> tuple[int, int]:
+    import pandas as pd
+
+    sheets: dict[str, pd.DataFrame] = pd.read_excel(
+        src, sheet_name=None, engine="openpyxl"
+    )
+
+    if sheet_filter:
+        if sheet_filter not in sheets:
+            avail = ", ".join(sheets)
+            print(f"  error: sheet '{sheet_filter}' not found (available: {avail})")
+            return 0, 1
+        sheets = {sheet_filter: sheets[sheet_filter]}
+
+    multi = len(sheets) > 1
+    ok = fail = 0
+    fmts = ("csv", "jsonl") if fmt == "both" else (fmt,)
+
+    for name, df in sheets.items():
+        sheet_label = name if multi else None
+        for f in fmts:
+            try:
+                convert(df, output_path(src, sheet_label, out_dir, f), f)
+                ok += 1
+            except Exception as exc:
+                print(f"  error writing {name}.{f}: {exc}")
+                fail += 1
+    return ok, fail
+
+
+def list_sheets(src: Path) -> None:
+    import pandas as pd
+
+    xf = pd.ExcelFile(src, engine="openpyxl")
+    print(f"{src.name}: {', '.join(xf.sheet_names)}")
+
+
+def main() -> int:
+    args = parse_args()
+
+    try:
+        import openpyxl as _  # noqa: F401
+    except ImportError:
+        sys.exit("error: openpyxl is required — pip install openpyxl")
+
+    files = resolve_inputs(args.input)
+
+    if args.list_sheets:
+        for f in files:
+            list_sheets(f)
+        return 0
+
+    total_ok = total_fail = 0
+    for f in files:
+        print(f"{f.name}:")
+        try:
+            ok, fail = process_file(f, args.format, args.output_dir, args.sheet)
+            total_ok += ok
+            total_fail += fail
+        except Exception as exc:
+            print(f"  error: {exc}")
+            total_fail += 1
+
+    if len(files) > 1:
+        print(f"\n{total_ok} written, {total_fail} failed")
+
+    return 1 if total_fail else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
