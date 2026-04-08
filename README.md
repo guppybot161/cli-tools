@@ -10,6 +10,7 @@ Small CLI utilities for WSL2 daily use.
 | `mdview` | Markdown viewer | pipx (mdview) |
 | `lt` | Local tunnel | — |
 | `die_excel` | Convert .xlsx to .csv / .jsonl (records) | pandas, openpyxl |
+| `iview` | Open images in IrfanView from WSL2 | IrfanView (Windows) |
 
 ## Install
 

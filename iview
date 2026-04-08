@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# iview — open images in IrfanView from WSL2
+
+set -euo pipefail
+
+IRFANVIEW="/mnt/c/Program Files/IrfanView/i_view64.exe"
+
+if [[ $# -eq 0 ]]; then
+    echo "usage: iview FILE [FILE ...]" >&2
+    exit 1
+fi
+
+if [[ ! -f "$IRFANVIEW" ]]; then
+    echo "error: IrfanView not found at $IRFANVIEW" >&2
+    exit 1
+fi
+
+for f in "$@"; do
+    if [[ ! -f "$f" ]]; then
+        echo "warning: $f not found, skipping" >&2
+        continue
+    fi
+    "$IRFANVIEW" "$(wslpath -w "$(realpath "$f")")" &
+done
