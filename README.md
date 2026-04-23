@@ -20,3 +20,9 @@ Copy any tool to `~/.local/bin` and make it executable:
 cp <tool> ~/.local/bin/
 chmod +x ~/.local/bin/<tool>
 ```
+
+Ensure `~/.local/bin` is on your PATH (add to `~/.bashrc` if not already there):
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
