@@ -8,7 +8,7 @@ Small CLI utilities for WSL2 daily use.
 |------|-------------|--------------|
 | `rec` | Minimal audio recorder using PulseAudio (WSL2/WSLg) | — |
 | `mdview` | Markdown viewer | pipx (mdview) |
-| `lt` | Local tunnel | — |
+| `lt` | List files modified in the last N days | — |
 | `die_excel` | Convert .xlsx to .csv / .jsonl (records) | pandas, openpyxl |
 | `iview` | Open images in IrfanView from WSL2 | IrfanView (Windows) |
 
