@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# npp — open files in Notepad++ from WSL2
+
+set -euo pipefail
+
+NOTEPAD_PP="/mnt/c/Program Files/Notepad++/notepad++.exe"
+
+if [[ ! -f "$NOTEPAD_PP" ]]; then
+    echo "error: Notepad++ not found at $NOTEPAD_PP" >&2
+    exit 1
+fi
+
+if [[ $# -eq 0 ]]; then
+    "$NOTEPAD_PP" &
+    exit 0
+fi
+
+args=()
+for arg in "$@"; do
+    if [[ -e "$arg" ]]; then
+        args+=("$(wslpath -w "$(realpath "$arg")")")
+    else
+        args+=("$arg")
+    fi
+done
+
+"$NOTEPAD_PP" "${args[@]}" &

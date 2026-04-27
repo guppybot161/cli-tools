@@ -11,6 +11,7 @@ Small CLI utilities for WSL2 daily use.
 | `lt` | List files modified in the last N days | — |
 | `die_excel` | Convert .xlsx to .csv / .jsonl (records) | pandas, openpyxl |
 | `iview` | Open images in IrfanView from WSL2 | IrfanView (Windows) |
+| `npp` | Open files in Notepad++ from WSL2 | Notepad++ (Windows) |
 
 ## Install
 
@@ -83,4 +84,17 @@ Open images in IrfanView from WSL2. Requires IrfanView installed at the default 
 ```bash
 iview photo.jpg
 iview *.png
+```
+
+### npp
+
+Open files in Notepad++ from WSL2. Translates WSL paths to Windows paths
+automatically. Existing arguments that aren't files (e.g. Notepad++ flags
+like `-multiInst`) are passed through unchanged.
+
+```bash
+npp                        # launch with no file
+npp notes.md               # open one file
+npp file1 file2            # open multiple files
+npp -multiInst notes.md    # pass Notepad++ flags through
 ```
