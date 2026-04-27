@@ -12,6 +12,7 @@ Small CLI utilities for WSL2 daily use.
 | `die_excel` | Convert .xlsx to .csv / .jsonl (records) | pandas, openpyxl |
 | `iview` | Open images in IrfanView from WSL2 | IrfanView (Windows) |
 | `npp` | Open files in Notepad++ from WSL2 | Notepad++ (Windows) |
+| `yt2md` | Fetch YouTube transcript as Markdown | yt-dlp, youtube-transcript-api |
 
 ## Install
 
@@ -26,6 +27,14 @@ Ensure `~/.local/bin` is on your PATH (add to `~/.bashrc` if not already there):
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
+```
+
+### mdview
+
+`mdview` has its own installer that sets up pipx and the stylesheet:
+
+```bash
+bash mdview/install.sh
 ```
 
 ## Usage
@@ -97,4 +106,15 @@ npp                        # launch with no file
 npp notes.md               # open one file
 npp file1 file2            # open multiple files
 npp -multiInst notes.md    # pass Notepad++ flags through
+```
+
+### yt2md
+
+Fetch a YouTube transcript and write it as Markdown.
+
+```bash
+yt2md https://youtu.be/VIDEO_ID
+yt2md VIDEO_ID --type interview
+yt2md https://www.youtube.com/watch?v=VIDEO_ID --lang de --out notes.md
+yt2md VIDEO_ID --chunk 60 --no-meta
 ```

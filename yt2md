@@ -1,0 +1,447 @@
+#!/usr/bin/env python3
+"""yt2md — fetch a YouTube transcript and write it as Markdown."""
+
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+from pathlib import Path
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Fetch a YouTube transcript and write it as Markdown.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""\
+examples:
+  yt2md https://youtu.be/dQw4w9WgXcQ
+  yt2md dQw4w9WgXcQ --type interview
+  yt2md https://www.youtube.com/watch?v=dQw4w9WgXcQ --lang de --out notes.md
+  yt2md dQw4w9WgXcQ --chunk 60 --no-meta
+""",
+    )
+    parser.add_argument("url", help="YouTube URL or bare video ID")
+    parser.add_argument(
+        "--type",
+        choices=("essay", "interview", "discussion"),
+        default="essay",
+        help="content type written to front matter (default: essay)",
+    )
+    parser.add_argument(
+        "--lang",
+        default="en",
+        help="preferred transcript language (default: en; falls back to en)",
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="output path (default: <title-slug>.md in cwd)",
+    )
+    parser.add_argument(
+        "--chunk",
+        type=int,
+        default=30,
+        metavar="SECONDS",
+        help="paragraph merge window in seconds (default: 30)",
+    )
+    parser.add_argument(
+        "--no-meta",
+        action="store_true",
+        help="omit YAML front matter",
+    )
+    parser.add_argument(
+        "--open",
+        action="store_true",
+        help="open result in mdview after writing",
+    )
+    return parser.parse_args()
+
+
+# ---------------------------------------------------------------------------
+# Video ID extraction
+# ---------------------------------------------------------------------------
+
+_ID_RE = re.compile(r"[A-Za-z0-9_-]{11}")
+_URL_PATTERNS = [
+    re.compile(r"youtu\.be/([A-Za-z0-9_-]{11})"),
+    re.compile(r"[?&]v=([A-Za-z0-9_-]{11})"),
+    re.compile(r"/shorts/([A-Za-z0-9_-]{11})"),
+    re.compile(r"/embed/([A-Za-z0-9_-]{11})"),
+]
+
+
+def extract_video_id(url_or_id: str) -> str:
+    for pattern in _URL_PATTERNS:
+        m = pattern.search(url_or_id)
+        if m:
+            return m.group(1)
+    # bare ID
+    if _ID_RE.fullmatch(url_or_id.strip()):
+        return url_or_id.strip()
+    sys.exit(f"error: could not extract a video ID from: {url_or_id}")
+
+
+# ---------------------------------------------------------------------------
+# Data fetching
+# ---------------------------------------------------------------------------
+
+_META_FALLBACK_KEYS = ("title", "channel", "upload_date", "description",
+                        "webpage_url", "chapters")
+
+
+def fetch_metadata(video_id: str) -> dict:
+    import yt_dlp
+    opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+        "extract_flat": False,
+    }
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except yt_dlp.utils.DownloadError as exc:
+        print(f"warning: could not fetch metadata ({exc}); continuing with transcript only",
+              file=sys.stderr)
+        return _meta_fallback(video_id)
+    except Exception as exc:
+        print(f"warning: metadata fetch failed ({exc}); continuing with transcript only",
+              file=sys.stderr)
+        return _meta_fallback(video_id)
+
+    return {
+        "title": info.get("title") or video_id,
+        "channel": info.get("channel") or info.get("uploader") or "",
+        "upload_date": _format_date(info.get("upload_date", "")),
+        "description": info.get("description") or "",
+        "webpage_url": info.get("webpage_url") or f"https://youtu.be/{video_id}",
+        "chapters": info.get("chapters") or None,
+    }
+
+
+def _meta_fallback(video_id: str) -> dict:
+    return {
+        "title": video_id,
+        "channel": "",
+        "upload_date": "",
+        "description": "",
+        "webpage_url": f"https://youtu.be/{video_id}",
+        "chapters": None,
+    }
+
+
+def _format_date(raw: str) -> str:
+    """Convert YYYYMMDD to YYYY-MM-DD, leave other strings unchanged."""
+    if re.fullmatch(r"\d{8}", raw):
+        return f"{raw[:4]}-{raw[4:6]}-{raw[6:]}"
+    return raw
+
+
+def fetch_transcript(video_id: str, lang: str) -> tuple[list[dict], bool]:
+    """Return (entries, is_generated). Entries: [{text, start, duration}]."""
+    from youtube_transcript_api import (
+        YouTubeTranscriptApi,
+        NoTranscriptFound,
+        TranscriptsDisabled,
+    )
+
+    api = YouTubeTranscriptApi()
+
+    def _list_langs() -> str:
+        try:
+            tl = api.list(video_id)
+            codes = [t.language_code for t in tl]
+            return ", ".join(codes)
+        except Exception:
+            return "(unavailable)"
+
+    candidates = [lang] if lang == "en" else [lang, "en"]
+
+    try:
+        transcript_list = api.list(video_id)
+    except TranscriptsDisabled:
+        sys.exit(f"error: transcripts are disabled for {video_id}")
+    except Exception as exc:
+        sys.exit(f"error: could not list transcripts: {exc}")
+
+    # Try to find a transcript in the requested language(s)
+    found = None
+    is_generated = True
+    for code in candidates:
+        try:
+            t = transcript_list.find_transcript([code])
+            found = t
+            is_generated = t.is_generated
+            if code != lang:
+                print(f"warning: '{lang}' not available, using '{code}'",
+                      file=sys.stderr)
+            break
+        except NoTranscriptFound:
+            continue
+
+    if found is None:
+        avail = _list_langs()
+        sys.exit(
+            f"error: no transcript found for language(s) {candidates!r}\n"
+            f"  available: {avail}"
+        )
+
+    try:
+        entries = found.fetch()
+    except Exception as exc:
+        sys.exit(f"error: could not fetch transcript: {exc}")
+
+    # Normalise FetchedTranscriptSnippet objects to plain dicts
+    raw = [{"text": e.text, "start": e.start, "duration": e.duration}
+           if not isinstance(e, dict) else e
+           for e in entries]
+
+    return raw, is_generated
+
+
+# ---------------------------------------------------------------------------
+# Timestamp helpers
+# ---------------------------------------------------------------------------
+
+def format_timestamp(seconds: float, use_hours: bool = False) -> str:
+    total = int(seconds)
+    h, rem = divmod(total, 3600)
+    m, s = divmod(rem, 60)
+    if use_hours:
+        return f"{h:02d}:{m:02d}:{s:02d}"
+    return f"{m:02d}:{s:02d}"
+
+
+def timestamp_link(seconds: float, video_id: str, use_hours: bool = False) -> str:
+    ts = format_timestamp(seconds, use_hours)
+    t = int(seconds)
+    return f"[{ts}](https://youtu.be/{video_id}?t={t})"
+
+
+# ---------------------------------------------------------------------------
+# Text processing
+# ---------------------------------------------------------------------------
+
+_WHITESPACE_RE = re.compile(r"\s+")
+# Common auto-caption artefacts: immediate word repetitions ("so so", "the the")
+_STUTTER_RE = re.compile(r"\b(\w+) \1\b", re.IGNORECASE)
+
+
+def _clean(text: str) -> str:
+    text = _WHITESPACE_RE.sub(" ", text).strip()
+    text = _STUTTER_RE.sub(r"\1", text)
+    return text
+
+
+def merge_into_paragraphs(entries: list[dict], chunk_seconds: int) -> list[dict]:
+    """Group entries into ~chunk_seconds windows. Returns [{text, start}]."""
+    if not entries:
+        return []
+
+    paragraphs: list[dict] = []
+    bucket_start = entries[0]["start"]
+    bucket_texts: list[str] = []
+
+    for e in entries:
+        if e["start"] - bucket_start >= chunk_seconds and bucket_texts:
+            paragraphs.append({
+                "text": _clean(" ".join(bucket_texts)),
+                "start": bucket_start,
+            })
+            bucket_start = e["start"]
+            bucket_texts = []
+        bucket_texts.append(e["text"].replace("\n", " "))
+
+    if bucket_texts:
+        paragraphs.append({
+            "text": _clean(" ".join(bucket_texts)),
+            "start": bucket_start,
+        })
+
+    return paragraphs
+
+
+def assign_chapters(
+    paragraphs: list[dict], chapters: list[dict] | None
+) -> list[dict]:
+    """Add a 'chapter' key to each paragraph based on yt-dlp chapter windows."""
+    if not chapters:
+        return paragraphs
+
+    result = []
+    for para in paragraphs:
+        chapter_title = chapters[0]["title"]  # default: first chapter
+        for ch in chapters:
+            if para["start"] >= ch["start_time"]:
+                chapter_title = ch["title"]
+            else:
+                break
+        result.append({**para, "chapter": chapter_title})
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Rendering
+# ---------------------------------------------------------------------------
+
+def render_markdown(
+    video_id: str,
+    meta: dict,
+    paragraphs: list[dict],
+    args: argparse.Namespace,
+    is_generated: bool,
+) -> str:
+    use_hours = bool(paragraphs) and paragraphs[-1]["start"] >= 3600
+    has_chapters = bool(paragraphs) and "chapter" in paragraphs[0]
+    url = meta["webpage_url"]
+
+    parts: list[str] = []
+
+    # --- front matter ---
+    if not args.no_meta:
+        title_escaped = meta["title"].replace('"', '\\"')
+        parts.append(
+            f'---\n'
+            f'title: "{title_escaped}"\n'
+            f'channel: {meta["channel"]}\n'
+            f'date: {meta["upload_date"]}\n'
+            f'url: {url}\n'
+            f'type: {args.type}\n'
+            f'lang: {args.lang}\n'
+            f'---\n'
+        )
+
+    # --- header block ---
+    parts.append(f"# {meta['title']}\n")
+    header_lines = []
+    if meta["channel"]:
+        header_lines.append(f"**Channel:** {meta['channel']}")
+    if meta["upload_date"]:
+        header_lines.append(f"**Published:** {meta['upload_date']}")
+    header_lines.append(f"**URL:** {url}")
+    parts.append("\n".join(header_lines) + "\n")
+    parts.append("---\n")
+
+    # --- no-chapters notice ---
+    if not has_chapters:
+        parts.append(
+            f"> No chapter data available. "
+            f"Transcript is chunked in ~{args.chunk}-second segments.\n"
+        )
+
+    # --- transcript ---
+    if not paragraphs:
+        parts.append("*No transcript content available.*\n")
+    else:
+        current_chapter = None
+        for para in paragraphs:
+            ch = para.get("chapter")
+            if ch and ch != current_chapter:
+                current_chapter = ch
+                parts.append(f"### {ch}\n")
+            tl = timestamp_link(para["start"], video_id, use_hours)
+            parts.append(f"{tl} {para['text']}\n")
+
+    # --- footer ---
+    parts.append("---\n")
+    footer = "*Transcript fetched with yt2md."
+    if is_generated:
+        footer += " Auto-generated captions may contain errors."
+    footer += "*\n"
+    parts.append(footer)
+
+    return "\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Output path
+# ---------------------------------------------------------------------------
+
+_SLUG_STRIP = re.compile(r"[^\w\s-]")
+_SLUG_SPACES = re.compile(r"[\s_]+")
+
+
+def _slugify(title: str) -> str:
+    slug = _SLUG_STRIP.sub("", title.lower())
+    slug = _SLUG_SPACES.sub("-", slug).strip("-")
+    return slug[:60] or "transcript"
+
+
+def derive_output_path(args: argparse.Namespace, meta: dict) -> Path:
+    if args.out:
+        p = args.out.expanduser()
+        if p.suffix.lower() != ".md":
+            p = p.with_suffix(".md")
+        return p
+
+    base = Path.cwd() / (_slugify(meta["title"]) + ".md")
+    if not base.exists():
+        return base
+    # avoid collision
+    stem = base.stem
+    n = 2
+    while True:
+        candidate = base.with_name(f"{stem}_{n}.md")
+        if not candidate.exists():
+            return candidate
+        n += 1
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+def main() -> int:
+    args = parse_args()
+
+    # dependency checks
+    try:
+        import yt_dlp as _  # noqa: F401
+    except ImportError:
+        sys.exit("error: yt-dlp is required — pip install yt-dlp")
+
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi as _  # noqa: F401
+    except ImportError:
+        sys.exit("error: youtube-transcript-api is required — pip install youtube-transcript-api")
+
+    video_id = extract_video_id(args.url)
+
+    print(f"fetching metadata for {video_id}...", file=sys.stderr)
+    meta = fetch_metadata(video_id)
+
+    print(f"fetching transcript ({args.lang})...", file=sys.stderr)
+    entries, is_generated = fetch_transcript(video_id, args.lang)
+
+    if not entries:
+        print("warning: transcript is empty", file=sys.stderr)
+
+    paragraphs = merge_into_paragraphs(entries, args.chunk)
+    paragraphs = assign_chapters(paragraphs, meta["chapters"])
+
+    md = render_markdown(video_id, meta, paragraphs, args, is_generated)
+
+    out = derive_output_path(args, meta)
+    out.write_text(md, encoding="utf-8")
+    print(out)
+
+    if args.open:
+        import subprocess
+        subprocess.Popen(
+            ["mdview", str(out)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
