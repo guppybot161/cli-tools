@@ -1,0 +1,18 @@
+#!/bin/bash
+# Launch Windows Terminal workspace: 3 tabs × 2 panes (vertical split), all Ubuntu/WSL
+# Uses a .cmd tempfile to avoid bash/wt.exe escaping issues across WSL interop
+
+CMDFILE=$(mktemp /tmp/workspace.XXXXXX.cmd)
+cat > "$CMDFILE" << 'BATCH'
+@echo off
+set P=Ubuntu 22.04.5 LTS
+set D=Ubuntu-22.04
+set HUB=~/pyprojects/claude_hub
+set BASE=~/pyprojects
+
+wt.exe -w new -p "%P%" -- wsl.exe -d %D% --cd %HUB% -e bash -lic claude ; split-pane -V -p "%P%" -- wsl.exe -d %D% --cd %HUB% ; new-tab -p "%P%" -- wsl.exe -d %D% --cd %BASE% ; split-pane -V -p "%P%" -- wsl.exe -d %D% --cd %BASE% ; new-tab -p "%P%" -- wsl.exe -d %D% --cd %BASE% ; split-pane -V -p "%P%" -- wsl.exe -d %D% --cd %BASE% ; focus-tab -t 0
+BATCH
+
+WINPATH=$(wslpath -w "$CMDFILE")
+cmd.exe /c "$WINPATH" 2>/dev/null
+rm -f "$CMDFILE"
