@@ -1,0 +1,32 @@
+/* Palette ported from cc-cheatsheet-v2.html */
+Screen {
+    background: #0d1117;
+    color: #c9d1d9;
+}
+
+#tabs {
+    height: 1;
+    padding: 0 1;
+}
+
+#search {
+    height: 3;
+    margin: 0 1;
+    border: round #30363d;
+    background: #161b22;
+}
+
+#search:focus {
+    border: round #79c0ff;
+}
+
+#results-scroll {
+    height: 1fr;
+    padding: 0 1;
+}
+
+#footer {
+    height: 1;
+    padding: 0 1;
+    color: #6e7681;
+}

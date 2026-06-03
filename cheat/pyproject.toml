@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cheat"
+version = "0.1.0"
+description = "Live-filtered cheatsheet TUI"
+requires-python = ">=3.10"
+dependencies = ["textual>=0.80"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23"]
+
+[project.scripts]
+cheat = "cheat.app:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["cheat"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
