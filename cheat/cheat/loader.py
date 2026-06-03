@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -36,7 +37,7 @@ class Sheet:
         return [e for g in self.groups for e in g.entries]
 
 
-def resolve_data_dir(cli_dir: str | None = None, env: dict | None = None) -> Path:
+def resolve_data_dir(cli_dir: str | None = None, env: Mapping[str, str] | None = None) -> Path:
     """Resolve the cheatsheet data dir: --dir > $CHEAT_DIR > DEFAULT_DATA_DIR."""
     env = os.environ if env is None else env
     if cli_dir:
