@@ -10,7 +10,7 @@ from textual.binding import Binding
 from textual.containers import VerticalScroll
 from textual.widgets import Input, Static
 
-from .loader import Group, Sheet, discover, resolve_data_dir
+from .loader import Entry, Group, Sheet, discover, resolve_data_dir
 from .search import match_spans, rank
 
 # Group accent colors ported from the HTML viewer; unknown groups fall back.
@@ -59,7 +59,7 @@ class CheatApp(App):
     def query_value(self) -> str:
         return self.query_one("#search", Input).value
 
-    def filtered_groups(self) -> list[tuple[Group, list]]:
+    def filtered_groups(self) -> list[tuple[Group, list[Entry]]]:
         sheet = self.active_sheet
         if sheet is None:
             return []
@@ -81,7 +81,6 @@ class CheatApp(App):
         inp = self.query_one("#search", Input)
         inp.value = ""
         inp.blur()
-        self.refresh_view()
 
     def action_next_sheet(self) -> None:
         if self.sheets:
