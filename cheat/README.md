@@ -1,7 +1,7 @@
 # cheat
 
 A Textual terminal UI for live-filtered cheatsheets. Auto-discovers every
-`*-commands.json` file in a data directory and renders them as tabs with BM25
+`*-commands.toml` file in a data directory and renders them as tabs with BM25
 search as you type.
 
 ```
@@ -47,22 +47,21 @@ Default data dir: `~/pyprojects/claude_hub/cheatsheets`
 
 ## Adding a cheatsheet
 
-Drop a JSON file named `<name>-commands.json` into the data dir. It appears
+Drop a TOML file named `<name>-commands.toml` into the data dir. It appears
 as a new tab the next time `cheat` starts. No code changes needed.
 
 Schema:
 
-```json
-{
-  "group-name": [
-    { "cmd": "/example",  "desc": "What it does", "tags": "search keywords" }
-  ]
-}
+```toml
+[[group-name]]
+cmd = "/example"
+desc = "What it does"
+tags = "search keywords"
 ```
 
-Each top-level key becomes a group with its own color. Known group names with
+Each table key becomes a group with its own color. Known group names with
 accent colors: `slash` (red), `keys` (blue), `reasoning` (purple). Unknown
-groups fall back to blue.
+groups fall back to blue. Extra fields per entry (e.g. `source`) are ignored.
 
 ## Dev
 

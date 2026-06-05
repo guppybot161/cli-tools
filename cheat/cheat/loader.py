@@ -1,11 +1,11 @@
-"""Discover and parse *-commands.json cheatsheets into a typed model.
+"""Discover and parse *-commands.toml cheatsheets into a typed model.
 
 Pure stdlib. No Textual dependency — unit-testable without a terminal.
 """
 from __future__ import annotations
 
-import json
 import os
+import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,7 +22,7 @@ class Entry:
 
 @dataclass
 class Group:
-    key: str            # raw JSON key, e.g. "slash"
+    key: str            # raw TOML table key, e.g. "slash"
     label: str          # display label, e.g. "SLASH"
     entries: list[Entry]
 
@@ -64,10 +64,10 @@ def _parse_entry(raw: dict) -> Entry | None:
 
 
 def load_sheet(path: Path) -> Sheet | None:
-    """Parse one JSON file into a Sheet, or None if malformed / empty."""
+    """Parse one TOML file into a Sheet, or None if malformed / empty."""
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (tomllib.TOMLDecodeError, OSError):
         return None
     if not isinstance(data, dict):
         return None
@@ -88,9 +88,9 @@ def load_sheet(path: Path) -> Sheet | None:
 
 
 def discover(data_dir: Path) -> list[Sheet]:
-    """Load every *-commands.json in data_dir, skipping unusable files."""
+    """Load every *-commands.toml in data_dir, skipping unusable files."""
     sheets: list[Sheet] = []
-    for path in sorted(Path(data_dir).glob("*-commands.json")):
+    for path in sorted(Path(data_dir).glob("*-commands.toml")):
         sheet = load_sheet(path)
         if sheet is not None:
             sheets.append(sheet)

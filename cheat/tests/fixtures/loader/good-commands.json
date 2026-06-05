@@ -1,9 +1,0 @@
-{
-  "slash": [
-    { "cmd": "/help",    "desc": "List commands",     "tags": "show list" },
-    { "cmd": "/compact", "desc": "Compress context",  "tags": "tokens summarise" }
-  ],
-  "keys": [
-    { "cmd": "Ctrl+L", "desc": "Clear screen", "tags": "wipe" }
-  ]
-}

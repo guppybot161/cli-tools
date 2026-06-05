@@ -13,7 +13,7 @@ FIXTURES = Path(__file__).parent / "fixtures" / "loader"
 
 
 def test_load_sheet_derives_title_and_labels():
-    sheet = load_sheet(FIXTURES / "good-commands.json")
+    sheet = load_sheet(FIXTURES / "good-commands.toml")
     assert sheet is not None
     assert sheet.title == "good"
     assert [g.key for g in sheet.groups] == ["slash", "keys"]
@@ -21,7 +21,7 @@ def test_load_sheet_derives_title_and_labels():
 
 
 def test_load_sheet_parses_entries_in_order():
-    sheet = load_sheet(FIXTURES / "good-commands.json")
+    sheet = load_sheet(FIXTURES / "good-commands.toml")
     slash = sheet.groups[0]
     assert slash.entries[0] == Entry(cmd="/help", desc="List commands", tags="show list")
     assert slash.entries[1].cmd == "/compact"
@@ -30,11 +30,11 @@ def test_load_sheet_parses_entries_in_order():
 
 
 def test_load_sheet_returns_none_for_malformed_json():
-    assert load_sheet(FIXTURES / "malformed-commands.json") is None
+    assert load_sheet(FIXTURES / "malformed-commands.toml") is None
 
 
 def test_load_sheet_returns_none_when_no_usable_groups():
-    assert load_sheet(FIXTURES / "empty-commands.json") is None
+    assert load_sheet(FIXTURES / "empty-commands.toml") is None
 
 
 def test_discover_skips_unusable_files():
