@@ -13,6 +13,7 @@ Small CLI utilities for WSL2 daily use.
 | `iview` | Open images in IrfanView from WSL2 | IrfanView (Windows) |
 | `npp` | Open files in Notepad++ from WSL2 | Notepad++ (Windows) |
 | `yt2md` | Fetch YouTube transcript as Markdown | yt-dlp, youtube-transcript-api |
+| `workspace` | Launch a full Windows Terminal dev layout (3 tabs × 2 panes) from WSL | Windows Terminal |
 
 ## Install
 
@@ -118,3 +119,16 @@ yt2md VIDEO_ID --type interview
 yt2md https://www.youtube.com/watch?v=VIDEO_ID --lang de --out notes.md
 yt2md VIDEO_ID --chunk 60 --no-meta
 ```
+
+### workspace
+
+Open a full Windows Terminal dev layout from WSL: 3 tabs, each split into two
+vertical panes, with the first pane launching `claude` in the hub project.
+
+```bash
+workspace
+```
+
+Portability: targets the **default** WSL distro (no `-d <name>`) and the stable
+`WSL` Windows Terminal profile, so it doesn't depend on the distro name or Store
+package version. Edit the `HUB`/`BASE` paths in the script to match your layout.
