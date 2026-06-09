@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""mdview — render a Markdown file and open it in Firefox."""
+"""mdview — render a Markdown file and open it in a browser."""
 
+import argparse
 import base64
 import mimetypes
 import re
 import sys
-import tempfile
 import subprocess
 from pathlib import Path
 
@@ -37,10 +37,29 @@ def inline_images(html: str, base_dir: Path) -> str:
     return re.sub(r'<img src="([^"]*)"', replace, html)
 
 
+MERMAID_SCRIPT = (
+    '<script type="module">'
+    'import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";'
+    'mermaid.initialize({startOnLoad:true});'
+    "</script>"
+)
+
+
+def render_mermaid(html: str) -> str:
+    """Convert <pre><code class="language-mermaid">...</code></pre> to <div class="mermaid">."""
+    return re.sub(
+        r'<pre><code class="language-mermaid">(.*?)</code></pre>',
+        lambda m: f'<div class="mermaid">{m.group(1)}</div>',
+        html,
+        flags=re.DOTALL,
+    )
+
+
 def render(md_path: Path) -> str:
     md = MarkdownIt("commonmark").enable("table")
     body = md.render(md_path.read_text(encoding="utf-8"))
     body = inline_images(body, md_path.parent)
+    body = render_mermaid(body)
     css = load_css()
     title = md_path.name
     return f"""<!DOCTYPE html>
@@ -48,6 +67,7 @@ def render(md_path: Path) -> str:
 <head>
 <meta charset="utf-8">
 <title>{title}</title>
+{MERMAID_SCRIPT}
 <style>
 {css}
 </style>
@@ -58,19 +78,48 @@ def render(md_path: Path) -> str:
 </html>"""
 
 
+def _is_wsl() -> bool:
+    return Path("/proc/sys/fs/binfmt_misc/WSLInterop").exists()
+
+
+def open_in_browser(file_path: Path):
+    if _is_wsl():
+        win_path = subprocess.check_output(
+            ["wslpath", "-w", str(file_path)]
+        ).decode().strip()
+        subprocess.Popen(
+            ["explorer.exe", win_path],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+    else:
+        import webbrowser
+        webbrowser.open(file_path.as_uri())
+
+
 def main():
-    args = sys.argv[1:]
-    pdf_mode = "--pdf" in args
-    args = [a for a in args if a != "--pdf"]
+    parser = argparse.ArgumentParser(
+        prog="mdview", description="Render a Markdown file to HTML/PDF and open it in a browser."
+    )
+    parser.add_argument("file", help="Markdown file to render")
+    parser.add_argument("-o", "--output", help="Write output to this path instead of a temp file")
+    parser.add_argument("--pdf", action="store_true", help="Render to PDF")
+    parser.add_argument(
+        "-b", "--browser", action=argparse.BooleanOptionalAction, default=True,
+        help="Open the result in the default browser (default: on)",
+    )
+    args = parser.parse_args()
 
-    if len(args) != 1:
-        print("Usage: mdview [--pdf] <file.md>", file=sys.stderr)
-        sys.exit(1)
-
-    md_path = Path(args[0]).resolve()
+    md_path = Path(args.file).resolve()
     if not md_path.exists():
         print(f"File not found: {md_path}", file=sys.stderr)
         sys.exit(1)
+
+    out_path = Path(args.output).resolve() if args.output else None
+    pdf_mode = args.pdf or (out_path is not None and out_path.suffix.lower() == ".pdf")
+    ext = ".pdf" if pdf_mode else ".html"
+
+    if out_path is None:
+        out_path = Path("/tmp") / f"mdview_{md_path.stem}{ext}"
 
     html = render(md_path)
 
@@ -80,23 +129,12 @@ def main():
         except ImportError:
             print("PDF mode requires weasyprint: pipx inject mdview weasyprint", file=sys.stderr)
             sys.exit(1)
-        with tempfile.NamedTemporaryFile(
-            suffix=".pdf", prefix="mdview_", dir="/tmp", delete=False
-        ) as f:
-            tmp_path = f.name
-        HTML(string=html).write_pdf(tmp_path)
+        HTML(string=html).write_pdf(str(out_path))
     else:
-        with tempfile.NamedTemporaryFile(
-            suffix=".html", prefix="mdview_", dir="/tmp", delete=False, mode="w", encoding="utf-8"
-        ) as f:
-            f.write(html)
-            tmp_path = f.name
+        out_path.write_text(html, encoding="utf-8")
 
-    win_path = subprocess.check_output(["wslpath", "-w", tmp_path]).decode().strip()
-    subprocess.Popen(
-        ["/mnt/c/Program Files/Mozilla Firefox/firefox.exe", "-new-window", win_path],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
+    if args.browser:
+        open_in_browser(out_path)
 
 
 if __name__ == "__main__":
