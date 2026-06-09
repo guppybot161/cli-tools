@@ -14,7 +14,19 @@ from .loader import Entry, Group, Sheet, discover, resolve_data_dir
 from .search import match_spans, rank
 
 # Group accent colors ported from the HTML viewer; unknown groups fall back.
-GROUP_COLORS = {"slash": "#ff7b72", "keys": "#79c0ff", "reasoning": "#d2a8ff"}
+GROUP_COLORS = {
+    # claude sheet
+    "slash": "#ff7b72",
+    "keys": "#79c0ff",
+    "reasoning": "#d2a8ff",
+    # nvim sheet — six mutually distinct accents
+    "custom": "#ffa657",
+    "neotree": "#7ee787",
+    "motions": "#56d4dd",
+    "editing": "#e3b341",
+    "windows": "#79c0ff",
+    "search": "#ff9bce",
+}
 DEFAULT_COLOR = "#79c0ff"
 DIM = "#6e7681"
 HILITE = "#56d364"
