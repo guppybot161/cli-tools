@@ -15,6 +15,7 @@ Small CLI utilities for WSL2 daily use.
 | `npp` | Open files in Notepad++ from WSL2 | Notepad++ (Windows) |
 | `yt2md` | Fetch YouTube transcript as Markdown | yt-dlp, youtube-transcript-api |
 | `cheat` | Live-filtered cheatsheet TUI (Textual) | pipx (cheat) |
+| `workspace` | Launch a full Windows Terminal dev layout (3 tabs × 2 panes) from WSL | Windows Terminal |
 
 ## Install
 
@@ -160,3 +161,16 @@ Inside the TUI: `/` focuses search, `Esc` clears it, `Tab` / `Shift+Tab`
 switch sheets, `↑` / `↓` scroll, `q` quits.
 
 Install with `bash cheat/install.sh` (requires pipx).
+
+### workspace
+
+Open a full Windows Terminal dev layout from WSL: 3 tabs, each split into two
+vertical panes, with the first pane launching `claude` in the hub project.
+
+```bash
+workspace
+```
+
+Portability: targets the **default** WSL distro (no `-d <name>`) and the stable
+`WSL` Windows Terminal profile, so it doesn't depend on the distro name or Store
+package version. Edit the `HUB`/`BASE` paths in the script to match your layout.
