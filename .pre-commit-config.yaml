@@ -1,0 +1,12 @@
+# Run `pre-commit install` once after cloning to activate.
+# See SECRETS.md for the full guide.
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: detect-private-key

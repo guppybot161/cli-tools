@@ -1,0 +1,121 @@
+#!/usr/bin/env python3
+"""die_word — convert .docx files to .md (via pandoc)."""
+
+from __future__ import annotations
+
+import argparse
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Convert .docx files to .md (Markdown) via pandoc.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""\
+examples:
+  die_word notes.docx
+  die_word notes.docx -o /tmp/out/
+  die_word ./meetings/
+  die_word notes.docx --media-dir media/
+  die_word notes.docx --stdout
+""",
+    )
+    parser.add_argument(
+        "input",
+        nargs="+",
+        type=Path,
+        help=".docx file(s) or a single directory (auto-globs *.docx)",
+    )
+    parser.add_argument(
+        "-o",
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="output directory (default: same as input file)",
+    )
+    parser.add_argument(
+        "--media-dir",
+        type=Path,
+        default=None,
+        help="extract embedded images to this directory (default: discard)",
+    )
+    parser.add_argument(
+        "--stdout",
+        action="store_true",
+        help="write Markdown to stdout instead of a file (single input only)",
+    )
+    return parser.parse_args()
+
+
+def resolve_inputs(paths: list[Path]) -> list[Path]:
+    if len(paths) == 1 and paths[0].is_dir():
+        files = sorted(paths[0].glob("*.docx"))
+        if not files:
+            sys.exit(f"error: no .docx files in {paths[0]}")
+        return files
+    for p in paths:
+        if not p.exists():
+            sys.exit(f"error: {p} does not exist")
+        if p.suffix.lower() != ".docx":
+            sys.exit(f"error: {p} is not a .docx file")
+    return sorted(paths)
+
+
+def output_path(src: Path, out_dir: Path | None) -> Path:
+    base = out_dir or src.parent
+    return base / f"{src.stem}.md"
+
+
+def convert(src: Path, dst: Path | None, media_dir: Path | None) -> None:
+    cmd = ["pandoc", str(src), "-f", "docx", "-t", "gfm", "--wrap=none"]
+    if media_dir is not None:
+        media_dir.mkdir(parents=True, exist_ok=True)
+        cmd += ["--extract-media", str(media_dir)]
+    if dst is not None:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        cmd += ["-o", str(dst)]
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or "pandoc failed")
+    if dst is None:
+        sys.stdout.write(result.stdout)
+    else:
+        print(f"  md   -> {dst}")
+
+
+def main() -> int:
+    args = parse_args()
+
+    if not shutil.which("pandoc"):
+        sys.exit("error: pandoc is required — sudo apt install pandoc")
+
+    files = resolve_inputs(args.input)
+
+    if args.stdout:
+        if len(files) != 1:
+            sys.exit("error: --stdout requires exactly one input file")
+        convert(files[0], None, args.media_dir)
+        return 0
+
+    total_ok = total_fail = 0
+    for f in files:
+        print(f"{f.name}:")
+        try:
+            convert(f, output_path(f, args.output_dir), args.media_dir)
+            total_ok += 1
+        except Exception as exc:
+            print(f"  error: {exc}")
+            total_fail += 1
+
+    if len(files) > 1:
+        print(f"\n{total_ok} written, {total_fail} failed")
+
+    return 1 if total_fail else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
